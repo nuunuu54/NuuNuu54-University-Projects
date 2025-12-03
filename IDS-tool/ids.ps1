@@ -3,16 +3,13 @@ param(
     $Args
 )
 
-# PowerShell wrapper to run the IDS Python CLI
-# Usage: .\ids.ps1 train, .\ids.ps1 batch, etc.
-
+# PowerShell wrapper to run the Python CLI. Usage: .\ids.ps1 train
 $root = Split-Path -Parent $MyInvocation.MyCommand.Definition
 $venv = Join-Path $root '.venv\Scripts\python.exe'
-
 if (Test-Path $venv) {
     $py = $venv
 } else {
     $py = 'python'
 }
 
-& $py -m 'IDS-tool.src.cli' @Args
+& $py -m src.cli @Args
