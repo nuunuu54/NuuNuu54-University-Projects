@@ -1,0 +1,48 @@
+=============================================================================
+OPTION B: SAFE LOCAL GIT PUSH (Recommended - No credentials shared)
+=============================================================================
+
+Run these commands in PowerShell from the project root directory.
+Replace <YOUR_REPO_URL> with your GitHub repo URL (HTTPS or SSH).
+
+Examples of repo URLs:
+  - HTTPS: https://github.com/YourUsername/IDS.git
+  - SSH:   git@github.com:YourUsername/IDS.git
+
+=============================================================================
+STEP 1: Initialize git repo and commit all changes
+=============================================================================
+
+git init
+git add -A
+git commit -m "IDS: ML-based intrusion detection with normalization, pseudo-IP synthesis, CLI, tests, and training pipeline"
+
+=============================================================================
+STEP 2: Create/switch to IDS branch and push
+=============================================================================
+
+git branch -M IDS
+git remote add origin <YOUR_REPO_URL>
+git push -u origin IDS
+
+=============================================================================
+COMPLETE COMMAND SEQUENCE (copy & paste)
+=============================================================================
+
+$repoUrl = "YOUR_REPO_URL_HERE"  # Replace with your HTTPS or SSH URL
+git init
+git add -A
+git commit -m "IDS: ML-based intrusion detection with normalization, pseudo-IP synthesis, CLI, tests, and training pipeline"
+git branch -M IDS
+git remote add origin $repoUrl
+git push -u origin IDS
+
+=============================================================================
+AFTER PUSH
+=============================================================================
+
+Your IDS project will be on GitHub at:
+  https://github.com/YourUsername/IDS/tree/IDS
+
+No credentials are exposed to this system.
+=============================================================================

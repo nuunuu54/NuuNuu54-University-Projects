@@ -1,0 +1,32 @@
+{
+  "file": "C:\\Users\\NuuNuu\\Desktop\\Yeah I code\\IDS\\data\\normalized\\Wednesday-workingHours.pcap_ISCX.normalized.csv",
+  "trained": true,
+  "model_path": "C:\\Users\\NuuNuu\\Desktop\\Yeah I code\\IDS\\models\\rf_meta_Wednesday-workingHours.pcap_ISCX.normalized.pkl",
+  "metrics": {
+    "0": {
+      "precision": 0.9996582948915086,
+      "recall": 0.9887621461765949,
+      "f1-score": 0.9941803661696614,
+      "support": 11835.0
+    },
+    "1": {
+      "precision": 0.8324937027707808,
+      "recall": 0.9939849624060151,
+      "f1-score": 0.906100068540096,
+      "support": 665.0
+    },
+    "accuracy": 0.98904,
+    "macro avg": {
+      "precision": 0.9160759988311447,
+      "recall": 0.9913735542913049,
+      "f1-score": 0.9501402173548787,
+      "support": 12500.0
+    },
+    "weighted avg": {
+      "precision": 0.9907651385906858,
+      "recall": 0.98904,
+      "f1-score": 0.9894944943357685,
+      "support": 12500.0
+    }
+  }
+}
