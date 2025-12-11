@@ -81,3 +81,5 @@ Dry-Run Mode
 ```
 
 After running with `-DryRun`, inspect the console output and the log (if writing to a log directory was not suppressed) for `DRY-RUN:` entries describing planned changes.
+
+**See Also:** For a detailed example of dry-run output with a complete configuration, see \DRY_RUN_OUTPUT.md\ in this repository. This document shows the expected output when running the script with a sample configuration file and demonstrates all major features and phases of the automation.

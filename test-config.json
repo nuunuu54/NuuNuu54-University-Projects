@@ -1,0 +1,14 @@
+{
+  "Hostname": "FAB-SERVER01",
+  "IpAddress": "192.168.1.100",
+  "SubnetMask": "255.255.255.0",
+  "DefaultGateway": "192.168.1.1",
+  "DnsServers": ["8.8.8.8", "8.8.4.4"],
+  "Roles": ["Web-Server", "RSAT-DNS-Server"],
+  "CreateDefaultIISPage": true,
+  "EnableWebFirewallRules": true,
+  "DnsZoneName": "test.local",
+  "UseWSUS": true,
+  "WSUSServer": "http://wsus.internal:8530",
+  "TimeZone": "Eastern Standard Time"
+}
