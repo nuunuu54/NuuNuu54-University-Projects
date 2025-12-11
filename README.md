@@ -121,45 +121,6 @@ tests and PSScriptAnalyzer on push/PRs.
 
 MIT — see repository for details.
 
----
-
-If you want I can also embed the full dry-run output and test logs directly into this README
-or link to individual sections; tell me how verbose you want the README to be.
-- `-EnableWebFirewallRules` *(switch)*: Enables common inbound firewall rules for HTTP/HTTPS.
-- `-DnsZoneName` *(string)*: Creates a primary zone if not present (e.g., `corp.fabrikam.local`).
-- `-DnsRecords` *(hashtable[])*: A records to add, e.g. `@(@{Name='www';IPv4='10.0.0.50'})`.
-- `-UseWSUS` *(switch)* and `-WSUSServer` *(string)*: Use managed source; if a URL is provided, the script sets policy keys and restarts `wuauserv`.
-- `-SkipUpdates` *(switch)*: Skips Windows Update step.
-- `-NoReboot` *(switch)*: Suppresses automatic reboot; logs pending reboot only.
-- `-ConfigPath` *(string)*: JSON or CSV answer file to pre-fill parameters.
-- `-LogDirectory` *(string)*: Specifies a custom directory for log files. Defaults to `C:\Logs`.
-
-### Answer File Formats
-
-**JSON (single object):**
-```json
-{
-  "Hostname": "FAB-WEB01",
-  "IpAddress": "10.10.1.50",
-  "SubnetMask": "255.255.255.0",
-  "DefaultGateway": "10.10.1.1",
-  "DnsServers": ["10.10.1.10", "10.10.1.11"],
-  "Roles": ["Web-Server"],
-  "CreateDefaultIISPage": true,
-  "EnableWebFirewallRules": true,
-  "TimeZone": "UTC"
-}
-```
-
-**CSV (first row used):**
-```csv
-Hostname,IpAddress,SubnetMask,DefaultGateway,DnsServers,Roles,TimeZone
-FAB-WEB01,10.10.1.50,255.255.255.0,10.10.1.1,"10.10.1.10|10.10.1.11","Web-Server",UTC
-```
-> Note: For multiple DNS servers in CSV, use a delimiter like `|` and map to an array after import if needed.
-
----
-
 ## Usage Examples
 
 ```powershell
