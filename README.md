@@ -1,23 +1,130 @@
 
-# Setup-FabrikamServer — Extended User & Developer Guide
+﻿# Server-Admin-Project — Windows Server automation
+
+<div align="center">
+
+[![Tests](https://img.shields.io/badge/tests-passing-brightgreen)]()
+[![PowerShell](https://img.shields.io/badge/PowerShell-5.1%2B-blue)]()
+[![License](https://img.shields.io/badge/License-MIT-green)]()
+
+</div>
 
 ## Overview
-`Setup-FabrikamServer-Extended.ps1` builds on the base script to add parameter validation, WSUS support, role-specific post-configuration (IIS default page & firewall, DNS zones & records), an answer-file mode, and controls to skip updates or suppress reboot.
+
+`Setup-FabrikamServer-Extended.ps1` automates baseline configuration for Windows Server
+including hostname, static networking, Windows feature installation (IIS/DNS), WSUS
+policy configuration, Windows Update orchestration, and post-install tasks. The script
+includes a dry-run preview mode and a rollback framework to safely undo applied changes.
+
+This branch contains the PowerShell automation, tests, and documentation. For the IDS
+project (separate), see the `IDS-Project` branch.
+
+## Key Features
+
+- Parameter validation and answer-file support (JSON / CSV)
+- Dry-run mode (`-DryRun`) — shows planned actions without applying changes
+- Rollback framework — registers reversible actions and rolls back on error
+- Cross-version compatibility (PowerShell 5.1 and PowerShell 7+)
+- Role-specific post-install configuration: IIS default page, DNS zone/records
+- WSUS registry configuration and Windows Update orchestration
+- Pester test suite for helper functions and parsing logic
+
+## Quick Start
+
+Prerequisites:
+- Windows Server 2022
+- Run PowerShell as Administrator
+- Execution policy: `RemoteSigned` recommended
+
+Clone and use Server-Admin-Project branch:
+
+```powershell
+git clone https://github.com/nuunuu54/NuuNuu54-University-Projects.git
+cd "Server-Admin-Work"
+git checkout Server-Admin-Project
+```
+
+Preview what the script would do (recommended):
+
+```powershell
+.\Setup-FabrikamServer-Extended.ps1 -DryRun -ConfigPath .\test-config.json -SkipUpdates
+```
+
+To apply changes, run without `-DryRun`:
+
+```powershell
+.\Setup-FabrikamServer-Extended.ps1 -ConfigPath .\test-config.json
+```
+
+## Installation & Tests
+
+This project uses Pester for unit tests and GitHub Actions for CI. To run tests locally:
+
+```powershell
+Install-Module Pester -Scope CurrentUser -Force
+Invoke-Pester -Path .\Setup-FabrikamServer-Extended.Tests.ps1
+```
+
+Test results are included in `Test_Results.txt` (excerpt below).
+
+## Example Dry-Run Output (excerpt)
+
+Below is a short excerpt from the dry-run demonstration (`DRY_RUN_OUTPUT.md`). It
+shows how the script logs planned changes with the `DRY-RUN:` prefix.
+
+```
+[2025-12-11 12:45:31] [INFO] DRY-RUN: Rename computer to FAB-SERVER01
+[2025-12-11 12:45:33] [INFO] DRY-RUN: Set static IP: 192.168.1.100/24
+[2025-12-11 12:45:34] [INFO] DRY-RUN: Install Windows feature: Web-Server
+[2025-12-11 12:45:35] [INFO] DRY-RUN: Create default IIS page at C:\\inetpub\\wwwroot\\index.html
+[2025-12-11 12:45:37] [INFO] DRY-RUN: Set registry key HKLM\\\\Software\\\\Policies\\\\Microsoft\\\\Windows\\\\WindowsUpdate\\\\AU
+[2025-12-11 12:45:38] [INFO] DRY-RUN MODE: No actual changes applied
+```
+
+Full dry-run output and guidance are in `DRY_RUN_OUTPUT.md`.
+
+## Test Output (Pester) — excerpt
+
+```
+Describing Setup-FabrikamServer-Extended Function Tests
+  Context Convert-SubnetMaskToPrefixLength
+    [+] should convert a valid subnet mask to a prefix length
+    [+] should throw an error for an invalid subnet mask
+  Context Test-IPv4Address
+    [+] should return true for a valid IPv4 address
+    [+] should return false for an invalid IPv4 address
+  Context Get-PrimaryInterface
+    [+] should return the first "Up" interface
+  Context Import-AnswerFile
+    [+] should import a JSON answer file
+
+Tests completed in 00:00:15.27
+Passed: 12 Failed: 0 Skipped: 0
+```
+
+See `Test_Results.txt` for the full output.
+
+## Documentation
+
+- `USER_GUIDE.md` — User instructions and examples
+- `DEVELOPER_DOCS.md` — Developer reference and architecture
+- `INTEGRATION_PLAYBOOK.md` — Lab testing/verification steps
+- `DRY_RUN_OUTPUT.md` — Complete dry-run demonstration
+- `COMPLETENESS_CHECKLIST.md` — Project validation checklist
+
+## Contributing & CI
+
+Contributions: open a pull request against `Server-Admin-Project`. CI runs Pester
+tests and PSScriptAnalyzer on push/PRs.
+
+## License
+
+MIT — see repository for details.
 
 ---
 
-## Prerequisites
-- **OS:** Windows Server 2022 (Standard/Datacenter)
-- **PowerShell:** 5.1 and 7+
-- **Admin Rights:** Run as Administrator
-- **Network:** Ensure IP/prefix/gateway/DNS values are valid for your subnet
-- **Execution Policy:** `RemoteSigned` recommended
-
----
-
-## New Parameters & Behaviors
-
-- `-CreateDefaultIISPage` *(switch)*: Creates a simple `index.html` in `C:\inetpub\wwwroot`.
+If you want I can also embed the full dry-run output and test logs directly into this README
+or link to individual sections; tell me how verbose you want the README to be.
 - `-EnableWebFirewallRules` *(switch)*: Enables common inbound firewall rules for HTTP/HTTPS.
 - `-DnsZoneName` *(string)*: Creates a primary zone if not present (e.g., `corp.fabrikam.local`).
 - `-DnsRecords` *(hashtable[])*: A records to add, e.g. `@(@{Name='www';IPv4='10.0.0.50'})`.
