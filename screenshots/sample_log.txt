@@ -1,0 +1,5 @@
+[2025-12-11 12:00:00] [INFO] Logging initialized. Log: C:\Logs\ServerSetup_20251211_120000.log
+[2025-12-11 12:00:05] [INFO] Converted SubnetMask '255.255.255.0' to PrefixLength '24'.
+[2025-12-11 12:00:06] [INFO] IPv4 configuration applied: 10.0.0.100/24 with gateway 10.0.0.1.
+[2025-12-11 12:00:10] [INFO] Installed Windows Feature 'Web-Server'.
+[2025-12-11 12:00:12] [INFO] Default IIS page created at C:\inetpub\wwwroot\index.html

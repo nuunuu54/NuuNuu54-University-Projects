@@ -156,6 +156,9 @@ param(
     [string]$ConfigPath,
 
     [Parameter(Mandatory = $false)]
+    [switch]$DryRun,
+
+    [Parameter(Mandatory = $false)]
     [string]$LogDirectory = 'C:\Logs'
 )
 
@@ -164,6 +167,7 @@ param(
 $script:LogFile      = $null
 $script:Transcript   = $null
 $script:PendingReboot = $false
+$script:DryRun = $false
 
 function Write-Log {
     [CmdletBinding()]
@@ -188,13 +192,12 @@ function Initialize-Logging {
     )
     try {
         if (-not (Test-Path -Path $LogPath)) {
-            New-Item -Path $LogPath -ItemType Directory -Force | Out-Null
+            Execute-OrDryRun -Description "Create log directory $LogPath" -Action { New-Item -Path $LogPath -ItemType Directory -Force | Out-Null }
         }
         $stamp = (Get-Date).ToString('yyyyMMdd_HHmmss')
         $script:LogFile    = Join-Path $LogPath "ServerSetup_$stamp.log"
         $script:Transcript = Join-Path $LogPath "ServerSetup_$stamp.transcript.txt"
-
-        Start-Transcript -Path $script:Transcript -Force | Out-Null
+        Execute-OrDryRun -Description "Start transcript at $script:Transcript" -Action { Start-Transcript -Path $script:Transcript -Force | Out-Null }
         Write-Log "Logging initialized. Log: $script:LogFile; Transcript: $script:Transcript"
     } catch {
         Write-Log "Failed to initialize logging: $($_.Exception.Message)" 'ERROR'
@@ -206,6 +209,59 @@ function Stop-Logging {
     [CmdletBinding()]
     param()
     try { Stop-Transcript | Out-Null } catch {}
+}
+
+# Rollback framework: register reversible changes and rollback in reverse order
+$script:AppliedChanges = @()
+
+function Register-AppliedChange {
+    [CmdletBinding()]
+    param(
+        [Parameter(Mandatory=$true)][string]$Type,
+        [Parameter(Mandatory=$true)][string]$Description,
+        [Parameter(Mandatory=$true)][scriptblock]$RevertScript
+    )
+    $obj = [pscustomobject]@{
+        Type = $Type
+        Description = $Description
+        Revert = $RevertScript
+    }
+    $script:AppliedChanges += $obj
+    Write-Log "Registered applied change: $Type - $Description" 'DEBUG'
+}
+
+function Rollback-AppliedChanges {
+    [CmdletBinding()]
+    param()
+    if (-not $script:AppliedChanges -or $script:AppliedChanges.Count -eq 0) { Write-Log "No applied changes to rollback."; return }
+    Write-Log "Starting rollback of $($script:AppliedChanges.Count) applied changes..." 'WARN'
+    for ($i = $script:AppliedChanges.Count - 1; $i -ge 0; $i--) {
+        $c = $script:AppliedChanges[$i]
+        try {
+            Write-Log "Rolling back: $($c.Type) - $($c.Description)" 'WARN'
+            & $c.Revert
+            Write-Log "Rolled back: $($c.Description)" 'INFO'
+        } catch {
+            Write-Log "Rollback failed for $($c.Description): $($_.Exception.Message)" 'ERROR'
+        }
+    }
+    # clear applied changes after attempt
+    $script:AppliedChanges = @()
+    Write-Log "Rollback complete." 'WARN'
+}
+
+# Helper to execute an action or report it in dry-run mode
+function Execute-OrDryRun {
+    [CmdletBinding()]
+    param(
+        [Parameter(Mandatory=$true)][string]$Description,
+        [Parameter(Mandatory=$true)][scriptblock]$Action
+    )
+    if ($script:DryRun) {
+        Write-Log "DRY-RUN: $Description" 'INFO'
+    } else {
+        & $Action
+    }
 }
 
 function Test-IsAdmin {
@@ -284,8 +340,13 @@ function Import-AnswerFile {
         if (-not $obj) { throw "JSON answer file is empty or invalid." }
         return $obj
     } elseif ($ext -eq '.csv') {
-        $rows = Import-Csv -Path $Path
-        if (-not $rows -or $rows.Count -lt 1) { throw "CSV answer file has no rows." }
+        $content = Get-Content -Path $Path -Raw
+        Write-Host "CSV content read by Get-Content: $content"
+        $rows = $content | ConvertFrom-Csv
+        # Normalize to an array so single-row CSVs are handled consistently
+        if ($rows) { $rows = @($rows) } else { $rows = @() }
+        Write-Host "ConvertFrom-Csv returned $($rows.Count) rows."
+        if ($rows.Count -lt 1) { throw "CSV answer file has no rows." }
         return $rows[0]
     } else {
         throw "Unsupported answer file type: $ext (use .json or .csv)."
@@ -307,16 +368,13 @@ function Set-SystemConfig {
         Write-Log "Current hostname: $current; Desired: $NewHostname"
         if ($current -ne $NewHostname) {
             if ($PSCmdlet.ShouldProcess("ComputerName", "Rename to '$NewHostname'")) {
-                Rename-Computer -NewName $NewHostname -Force -ErrorAction Stop
-                Write-Log "Computer rename scheduled to '$NewHostname'. Reboot required."
-                $script:PendingReboot = $true
+                Execute-OrDryRun -Description "Rename computer to $NewHostname" -Action { Rename-Computer -NewName $NewHostname -Force -ErrorAction Stop; Write-Log "Computer rename scheduled to '$NewHostname'. Reboot required."; $script:PendingReboot = $true }
             }
         } else { Write-Log "Hostname already '$NewHostname'; no change." }
 
         if ($PSCmdlet.ShouldProcess("Time Zone", "Set to '$TimeZoneId'")) {
             try {
-                Set-TimeZone -Id $TimeZoneId -ErrorAction Stop
-                Write-Log "Time zone set to '$TimeZoneId'."
+                Execute-OrDryRun -Description "Set time zone to $TimeZoneId" -Action { Set-TimeZone -Id $TimeZoneId -ErrorAction Stop; Write-Log "Time zone set to '$TimeZoneId'." }
             } catch {
                 Write-Log "Failed to set time zone: $($_.Exception.Message)" 'ERROR'
                 throw
@@ -341,6 +399,8 @@ function Set-NetworkConfig {
     try {
         $targetAlias = Get-PrimaryInterface -Alias $Alias
         Write-Log "Target interface: $targetAlias"
+        # capture existing IPv4 addresses for rollback purposes
+        $prevAddrs = @(Get-NetIPAddress -InterfaceAlias $targetAlias -AddressFamily IPv4 -ErrorAction SilentlyContinue | Where-Object { $_.IPAddress -ne '127.0.0.1' } | Select-Object @{Name='IPAddress';Expression={$_.IPAddress}},@{Name='PrefixLength';Expression={$_.PrefixLength}})
 
         if ($IPv4) {
             if (-not (Test-IPv4Address -Address $IPv4)) { throw "Invalid IPv4 address: $IPv4" }
@@ -353,11 +413,22 @@ function Set-NetworkConfig {
 
             if ($PSCmdlet.ShouldProcess("Interface '$targetAlias'", "Configure IPv4 $IPv4/$Prefix Gateway=$Gateway")) {
                 try {
-                    Set-NetIPInterface -InterfaceAlias $targetAlias -Dhcp Disabled -ErrorAction SilentlyContinue
-                    Get-NetIPAddress -InterfaceAlias $targetAlias -AddressFamily IPv4 -ErrorAction SilentlyContinue |
-                        Where-Object { $_.IPAddress -ne '127.0.0.1' } | Remove-NetIPAddress -Confirm:$false -ErrorAction SilentlyContinue
-                    New-NetIPAddress -InterfaceAlias $targetAlias -IPAddress $IPv4 -PrefixLength $Prefix -DefaultGateway $Gateway -AddressFamily IPv4 -ErrorAction Stop | Out-Null
+                    Execute-OrDryRun -Description "Disable DHCP on interface $targetAlias" -Action { Set-NetIPInterface -InterfaceAlias $targetAlias -Dhcp Disabled -ErrorAction SilentlyContinue }
+                    Execute-OrDryRun -Description "Remove existing IPv4 addresses on $targetAlias" -Action { Get-NetIPAddress -InterfaceAlias $targetAlias -AddressFamily IPv4 -ErrorAction SilentlyContinue |
+                        Where-Object { $_.IPAddress -ne '127.0.0.1' } | Remove-NetIPAddress -Confirm:$false -ErrorAction SilentlyContinue }
+                    Execute-OrDryRun -Description "Add IPv4 $IPv4/$Prefix to $targetAlias with gateway $Gateway" -Action { New-NetIPAddress -InterfaceAlias $targetAlias -IPAddress $IPv4 -PrefixLength $Prefix -DefaultGateway $Gateway -AddressFamily IPv4 -ErrorAction Stop | Out-Null }
                     Write-Log "IPv4 configuration applied: $IPv4/$Prefix with gateway $Gateway."
+                    # register rollback: remove the newly added IP and restore previous IPs (only if not dry-run)
+                    if (-not $script:DryRun) {
+                        $rbTarget = $targetAlias; $rbNewIp = $IPv4; $rbPrev = $prevAddrs
+                        $revertScript = {
+                            foreach ($a in $rbPrev) {
+                                try { New-NetIPAddress -InterfaceAlias $rbTarget -IPAddress $a.IPAddress -PrefixLength $a.PrefixLength -ErrorAction SilentlyContinue } catch {}
+                            }
+                            try { Remove-NetIPAddress -InterfaceAlias $rbTarget -IPAddress $rbNewIp -Confirm:$false -ErrorAction SilentlyContinue } catch {}
+                        }
+                        Register-AppliedChange -Type 'Network' -Description "IPv4 $IPv4 on $targetAlias" -RevertScript $revertScript
+                    }
                 } catch {
                     Write-Log "Failed to set IPv4 config: $($_.Exception.Message)" 'ERROR'
                     throw
@@ -392,12 +463,22 @@ function Invoke-InstallWindowsFeature {
     param([Parameter(Mandatory=$true)][ValidateSet('Web-Server','DNS')][string]$Name)
     $isPS7 = ($PSVersionTable.PSVersion.Major -ge 7)
     try {
+        if ($script:DryRun) {
+            Write-Log "DRY-RUN: Would install Windows Feature '$Name' (no changes applied)." 'INFO'
+            return
+        }
         if (-not $isPS7) {
             Import-Module ServerManager -ErrorAction Stop
             Write-Log "Installing Windows Feature '$Name' via Install-WindowsFeature (PS 5.1)..."
             $result = Install-WindowsFeature -Name $Name -IncludeManagementTools -ErrorAction Stop
             if ($result.Success) { Write-Log "Feature '$Name' installed successfully." } else { Write-Log "Feature '$Name' install did not report success." 'WARN' }
             if ($result.RestartNeeded -and $result.RestartNeeded -ne 'No') { Write-Log "Feature '$Name' requested restart."; $script:PendingReboot = $true }
+            # register uninstall for rollback (best-effort)
+            try {
+                $revertCmd = "try { Uninstall-WindowsFeature -Name '$Name' -ErrorAction SilentlyContinue } catch {}"
+                $revertScript = [ScriptBlock]::Create($revertCmd)
+                if (-not $script:DryRun) { Register-AppliedChange -Type 'Feature' -Description "Installed feature $Name" -RevertScript $revertScript }
+            } catch { Write-Log ("Failed to register feature rollback for {0}: {1}" -f $Name, $_.Exception.Message) 'WARN' }
         } else {
             $pwsh5Path = Get-Command -Name powershell.exe -ErrorAction SilentlyContinue
             if (-not $pwsh5Path) {
@@ -431,6 +512,15 @@ function Invoke-InstallWindowsFeature {
                 throw "External Install-WindowsFeature failed with exit code $($p.ExitCode). Stderr: $stderr"
             }
             $script:PendingReboot = $script:PendingReboot -or (Test-PendingReboot)
+            # register uninstall via external powershell.exe for rollback
+            try {
+                $pwPath = $pwsh5Path.Source -replace "'","''"
+                $uninstallCmd = "Import-Module ServerManager -ErrorAction Stop; Uninstall-WindowsFeature -Name '$Name' -ErrorAction SilentlyContinue"
+                $encoded = [Convert]::ToBase64String([System.Text.Encoding]::Unicode.GetBytes($uninstallCmd))
+                $revertCmd = "`$p = New-Object System.Diagnostics.ProcessStartInfo; `$p.FileName = '$pwPath'; `$p.Arguments = '-NoProfile -ExecutionPolicy Bypass -EncodedCommand $encoded'; `$p.RedirectStandardOutput = `$true; `$p.RedirectStandardError = `$true; `$p.UseShellExecute = `$false; `$p.CreateNoWindow = `$true; `$pr = New-Object System.Diagnostics.Process; `$pr.StartInfo = `$p; `$pr.Start() | Out-Null; `$pr.WaitForExit()"
+                $revertScript = [ScriptBlock]::Create($revertCmd)
+                Register-AppliedChange -Type 'Feature' -Description "Installed feature $Name (external)" -RevertScript $revertScript
+            } catch { Write-Log ("Failed to register external feature rollback for {0}: {1}" -f $Name, $_.Exception.Message) 'WARN' }
         }
     } catch {
         Write-Log "Invoke-InstallWindowsFeature failed for '$Name': $($_.Exception.Message)" 'ERROR'
@@ -443,9 +533,11 @@ function Configure-IISPostInstall {
     param([switch]$CreateIndex,[switch]$EnableFirewall)
     try {
         Write-Log "Configuring IIS post-install..."
+        if ($script:DryRun) { Write-Log "DRY-RUN: Would configure IIS post-install (CreateIndex=$CreateIndex, EnableFirewall=$EnableFirewall)" 'INFO'; return }
         # Ensure web root exists
         $webroot = 'C:\inetpub\wwwroot'
-        if (-not (Test-Path $webroot)) { New-Item -ItemType Directory -Path $webroot -Force | Out-Null }
+        $webrootExisted = Test-Path $webroot
+        if (-not $webrootExisted) { New-Item -ItemType Directory -Path $webroot -Force | Out-Null }
 
         if ($CreateIndex) {
             $hostname = (Get-CimInstance Win32_ComputerSystem).Name
@@ -461,6 +553,15 @@ function Configure-IISPostInstall {
             $indexPath = Join-Path $webroot 'index.html'
             $content | Out-File -FilePath $indexPath -Encoding UTF8 -Force
             Write-Log "Default index.html created at $indexPath"
+            # register rollback to remove created file and (optionally) created webroot
+            $rbFile = $indexPath; $rbWebrootExisted = $webrootExisted
+            $revertIIS = {
+                try { Remove-Item -Path $rbFile -Force -ErrorAction SilentlyContinue } catch {}
+                if (-not $rbWebrootExisted) {
+                    try { Remove-Item -Path (Split-Path $rbFile -Parent) -Recurse -Force -ErrorAction SilentlyContinue } catch {}
+                }
+            }
+            Register-AppliedChange -Type 'IIS' -Description "Default index.html at $indexPath" -RevertScript $revertIIS
         }
 
         if ($EnableFirewall) {
@@ -480,12 +581,18 @@ function Configure-DNSPostInstall {
     param([string]$ZoneName,[hashtable[]]$Records)
     try {
         Write-Log "Configuring DNS post-install..."
+        if ($script:DryRun) { Write-Log "DRY-RUN: Would configure DNS zone and records for $ZoneName" 'INFO'; return }
         Import-Module DnsServer -ErrorAction Stop
         if ($ZoneName) {
-            if (-not (Get-DnsServerZone -Name $ZoneName -ErrorAction SilentlyContinue)) {
+            $zoneExisted = (Get-DnsServerZone -Name $ZoneName -ErrorAction SilentlyContinue)
+            if (-not $zoneExisted) {
                 if ($PSCmdlet.ShouldProcess("DNS", "Create primary zone '$ZoneName'")) {
                     Add-DnsServerPrimaryZone -Name $ZoneName -ZoneFile "$ZoneName.dns" -DynamicUpdate None -ErrorAction Stop | Out-Null
                     Write-Log "DNS primary zone created: $ZoneName"
+                    # register rollback for created zone
+                    $rbZone = $ZoneName
+                    $revertZone = { try { Remove-DnsServerZone -Name $rbZone -Force -ErrorAction SilentlyContinue } catch {} }
+                    Register-AppliedChange -Type 'DNS' -Description "Primary zone $ZoneName" -RevertScript $revertZone
                 }
             } else { Write-Log "DNS zone '$ZoneName' already exists; skipping." }
         }
@@ -499,7 +606,14 @@ function Configure-DNSPostInstall {
                     try {
                         Add-DnsServerResourceRecordA -ZoneName $ZoneName -Name $n -IPv4Address $ip -TimeToLive ([TimeSpan]::FromMinutes(15)) -ErrorAction Stop | Out-Null
                         Write-Log "Added A record: $n.$ZoneName -> $ip"
-                    } catch { Write-Log "Failed to add record $n: $($_.Exception.Message)" 'ERROR' }
+                        # register rollback for this record
+                        $rbName = $n; $rbZoneName = $ZoneName
+                        $revertRec = { try { Remove-DnsServerResourceRecord -ZoneName $rbZoneName -Name $rbName -RRType 'A' -Force -ErrorAction SilentlyContinue } catch {} }
+                        Register-AppliedChange -Type 'DNS' -Description "A record $n.$ZoneName -> $ip" -RevertScript $revertRec
+                    } catch {
+                        $errorMessage = $_.Exception.Message
+                        Write-Log "Failed to add record ${n}: ${errorMessage}" 'ERROR'
+                    }
                 }
             }
         }
@@ -530,13 +644,44 @@ function Configure-WSUSPolicy {
     param([Parameter(Mandatory=$true)][string]$ServerUrl)
     try {
         Write-Log "Configuring WSUS policy to '$ServerUrl'..."
-        New-Item -Path 'HKLM:\SOFTWARE\Policies\Microsoft\Windows\WindowsUpdate' -Force | Out-Null
-        New-Item -Path 'HKLM:\SOFTWARE\Policies\Microsoft\Windows\WindowsUpdate\AU' -Force | Out-Null
-        Set-ItemProperty -Path 'HKLM:\SOFTWARE\Policies\Microsoft\Windows\WindowsUpdate' -Name 'WUServer' -Value $ServerUrl -Force
-        Set-ItemProperty -Path 'HKLM:\SOFTWARE\Policies\Microsoft\Windows\WindowsUpdate' -Name 'WUStatusServer' -Value $ServerUrl -Force
-        Set-ItemProperty -Path 'HKLM:\SOFTWARE\Policies\Microsoft\Windows\WindowsUpdate\AU' -Name 'UseWUServer' -Value 1 -Force
+        if ($script:DryRun) { Write-Log "DRY-RUN: Would configure WSUS policy to '$ServerUrl'" 'INFO'; return }
+        $wuKey = 'HKLM:\SOFTWARE\Policies\Microsoft\Windows\WindowsUpdate'
+        $auKey = "$wuKey\AU"
+        # capture previous values for rollback
+        $prev = @{}
+        $prev.Exists = Test-Path $wuKey
+        $prev.WUServer = (Get-ItemProperty -Path $wuKey -Name 'WUServer' -ErrorAction SilentlyContinue).WUServer
+        $prev.WUStatusServer = (Get-ItemProperty -Path $wuKey -Name 'WUStatusServer' -ErrorAction SilentlyContinue).WUStatusServer
+        $prev.UseWUServer = (Get-ItemProperty -Path $auKey -Name 'UseWUServer' -ErrorAction SilentlyContinue).UseWUServer
+
+        New-Item -Path $wuKey -Force | Out-Null
+        New-Item -Path $auKey -Force | Out-Null
+        Set-ItemProperty -Path $wuKey -Name 'WUServer' -Value $ServerUrl -Force
+        Set-ItemProperty -Path $wuKey -Name 'WUStatusServer' -Value $ServerUrl -Force
+        Set-ItemProperty -Path $auKey -Name 'UseWUServer' -Value 1 -Force
         Write-Log "WSUS registry policy set. Restarting Windows Update service..."
         Restart-Service -Name wuauserv -Force
+
+        # register rollback to restore previous WSUS registry state
+        try {
+            if ($prev.WUServer -ne $null) { $rbWUServer = $prev.WUServer -replace "'","''" } else { $rbWUServer = $null }
+            if ($prev.WUStatusServer -ne $null) { $rbWUStatus = $prev.WUStatusServer -replace "'","''" } else { $rbWUStatus = $null }
+            if ($null -ne $prev.UseWUServer) { $rbUseWUServer = $prev.UseWUServer } else { $rbUseWUServer = $null }
+            $rbExists = $prev.Exists
+            $revertScript = [ScriptBlock]::Create(
+                "`$wuKey = '$wuKey'; `$auKey = '$auKey';`n" +
+                (if (-not $rbExists) {
+                    "try { Remove-Item -Path `$wuKey -Recurse -Force -ErrorAction SilentlyContinue } catch {}"
+                } else {
+                    "try {"
+                    + (if ($rbWUServer) { " Set-ItemProperty -Path `$wuKey -Name 'WUServer' -Value '$rbWUServer' -Force -ErrorAction SilentlyContinue;" } else { " Remove-ItemProperty -Path `$wuKey -Name 'WUServer' -ErrorAction SilentlyContinue;" })
+                    + (if ($rbWUStatus) { " Set-ItemProperty -Path `$wuKey -Name 'WUStatusServer' -Value '$rbWUStatus' -Force -ErrorAction SilentlyContinue;" } else { " Remove-ItemProperty -Path `$wuKey -Name 'WUStatusServer' -ErrorAction SilentlyContinue;" })
+                    + (if ($rbUseWUServer -ne $null) { " Set-ItemProperty -Path `$auKey -Name 'UseWUServer' -Value $rbUseWUServer -Force -ErrorAction SilentlyContinue;" } else { " Remove-ItemProperty -Path `$auKey -Name 'UseWUServer' -ErrorAction SilentlyContinue;" })
+                    + " } catch {} `n try { Restart-Service -Name wuauserv -Force } catch {}"
+                })
+            )
+            Register-AppliedChange -Type 'WSUS' -Description "WSUS policy set to $ServerUrl" -RevertScript $revertScript
+        } catch { Write-Log ("Failed to register WSUS rollback: {0}" -f $_.Exception.Message) 'WARN' }
     } catch {
         Write-Log "Failed to configure WSUS policy: $($_.Exception.Message)" 'ERROR'
         throw
@@ -560,11 +705,15 @@ function Invoke-WindowsUpdate {
             $updatesToInstall = New-Object -ComObject Microsoft.Update.UpdateColl
             for ($i = 0; $i -lt $result.Updates.Count; $i++) { $updatesToInstall.Add($result.Updates.Item($i)) | Out-Null }
             Write-Log "Downloading updates..."
-            $downloader = $session.CreateUpdateDownloader(); $downloader.Updates = $updatesToInstall; $downloader.Download() | Out-Null
-            Write-Log "Installing updates..."
-            $installer = $session.CreateUpdateInstaller(); $installer.Updates = $updatesToInstall; $installResult = $installer.Install()
-            Write-Log "Install result: $($installResult.ResultCode); RebootRequired: $($installResult.RebootRequired)"
-            if ($installResult.RebootRequired) { Write-Log "Windows Update reports reboot required."; $script:PendingReboot = $true }
+            if ($script:DryRun) {
+                Write-Log "DRY-RUN: Would download and install $count updates (skipped)." 'INFO'
+            } else {
+                $downloader = $session.CreateUpdateDownloader(); $downloader.Updates = $updatesToInstall; $downloader.Download() | Out-Null
+                Write-Log "Installing updates..."
+                $installer = $session.CreateUpdateInstaller(); $installer.Updates = $updatesToInstall; $installResult = $installer.Install()
+                Write-Log "Install result: $($installResult.ResultCode); RebootRequired: $($installResult.RebootRequired)"
+                if ($installResult.RebootRequired) { Write-Log "Windows Update reports reboot required."; $script:PendingReboot = $true }
+            }
         } else { Write-Log "No updates to install or operation skipped." }
     } catch {
         Write-Log "Invoke-WindowsUpdate failed: $($_.Exception.Message)" 'ERROR'
@@ -596,7 +745,10 @@ function Invoke-RebootIfNeeded {
 
 #region Main Orchestration
 
-try {
+if ($global:IsTestMode -ne $true) {
+    try {
+    # honor DryRun parameter
+    $script:DryRun = $DryRun.IsPresent -or $script:DryRun
     if (-not (Test-IsAdmin)) { throw "This script must be run as an Administrator." }
 
     # Parameter validation
@@ -615,7 +767,7 @@ try {
     if ($ConfigPath) {
         $cfg = Import-AnswerFile -Path $ConfigPath
         foreach ($k in $cfg.PSObject.Properties.Name) {
-            if ($PSBoundParameters.ContainsKey($k) -and $PSBoundParameters[$k]) { continue } # don't override provided params
+            if ($PSBoundParameters.ContainsKey($k)) { continue } # don't override provided params
             Set-Variable -Name $k -Value $cfg.$k -Scope Script -ErrorAction SilentlyContinue
         }
     }
@@ -643,7 +795,14 @@ try {
     Write-Log "=== Fabrikam Server Setup (Extended) completed ==="
 } catch {
     Write-Log "Fatal error: $($_.Exception.Message)" 'ERROR'
+    try {
+        # attempt rollback of applied changes where possible
+        Rollback-AppliedChanges
+    } catch {
+        Write-Log "Rollback attempt failed: $($_.Exception.Message)" 'ERROR'
+    }
     Write-Log "Script terminated with errors. Check transcript and log for details." 'ERROR'
-} finally { Stop-Logging }
+    } finally { Stop-Logging }
+}
 
 #endregion
