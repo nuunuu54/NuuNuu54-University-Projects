@@ -5,7 +5,7 @@
 
 [![Tests](https://img.shields.io/badge/tests-passing-brightgreen)]()
 [![PowerShell](https://img.shields.io/badge/PowerShell-5.1%2B-blue)]()
-[![License](https://img.shields.io/badge/License-MIT-green)]()
+
 
 </div>
 
@@ -116,10 +116,6 @@ See `Test_Results.txt` for the full output.
 
 Contributions: open a pull request against `Server-Admin-Project`. CI runs Pester
 tests and PSScriptAnalyzer on push/PRs.
-
-## License
-
-MIT — see repository for details.
 
 ## Usage Examples
 
