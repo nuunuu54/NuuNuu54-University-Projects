@@ -112,10 +112,6 @@ See `Test_Results.txt` for the full output.
 - `DRY_RUN_OUTPUT.md` — Complete dry-run demonstration
 - `COMPLETENESS_CHECKLIST.md` — Project validation checklist
 
-## Contributing & CI
-
-Contributions: open a pull request against `Server-Admin-Project`. CI runs Pester
-tests and PSScriptAnalyzer on push/PRs.
 
 ## Usage Examples
 
@@ -158,21 +154,3 @@ tests and PSScriptAnalyzer on push/PRs.
 - **DNS module not found:** Ensure `DNS` role installed; reopen elevated PowerShell if module import fails.
 
 ---
-
-## Deliverables (current repo)
-
-- `Setup-FabrikamServer-Extended.ps1` — main automation script (modular, commented).
-- `Setup-FabrikamServer-Extended.Tests.ps1` — Pester tests for helper functions and CSV/JSON answer file parsing.
-- `USER_GUIDE.md` — user instructions and quick-start (added).
-- `DEVELOPER_DOCS.md` — developer-focused documentation and function reference (added).
-- `FINAL_REPORT.md` — mapping of rubric to repo and actions taken (added).
-- `Test_Results.txt` — Pester results / logs (updated).
-
-If anything else is desired (CI pipeline, screenshots, or a PR), tell me which next and I will prepare it.
-
-CI
--- A GitHub Actions workflow has been added at `.github/workflows/ci.yml`. It runs on Windows, installs `Pester` and `PSScriptAnalyzer`, runs script analysis, executes the Pester tests, and uploads `Test_Results.txt` as an artifact.
-
-Screenshots
--- A `screenshots/` folder was added with guidance (`screenshots/README.md`) and a `sample_log.txt` placeholder. Please add real PNG screenshots from your lab into this folder (IIS page, DNS resolution, WSUS registry keys, logs listing, Pester/CI results).
-
