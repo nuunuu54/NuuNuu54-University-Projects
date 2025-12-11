@@ -1,53 +1,134 @@
-# IDS-Tool: Machine Learning-Based Intrusion Detection System
+# Server-Admin-Work Repository
 
-<div align="center">
+This repository contains **two separate projects** with independent branches:
 
-[![Tests](https://img.shields.io/badge/tests-passing-brightgreen)]()
-[![Python](https://img.shields.io/badge/Python-3.10%2B-blue)]()
-[![License](https://img.shields.io/badge/License-MIT-green)]()
+## 📋 Projects Overview
 
-A **robust, production-grade intrusion detection system** combining hybrid heuristics with machine learning for fast, accurate network threat detection.
+### 1. **Server-Admin-Project** 
+PowerShell-based Windows Server automation and configuration management.
 
-[Features](#features) • [Quick Start](#quick-start) • [Installation](#installation) • [Usage](#usage) • [Architecture](#architecture) • [Documentation](#documentation)
+**Branch:** `Server-Admin-Project`
 
-</div>
+**Features:**
+- Automated Windows Server 2022 configuration
+- Network settings, IIS, DNS, WSUS, Windows Update management
+- Rollback framework for all applied changes
+- Dry-run mode for safe preview before execution
+- Comprehensive Pester test suite (14 tests)
+- GitHub Actions CI/CD pipeline
 
-## Overview
+**Quick Start:**
+```bash
+git clone <repo-url>
+git checkout Server-Admin-Project
+# See README.md in Server-Admin-Project branch for full setup
+```
 
-**IDS-Tool** is a machine learning-based intrusion detection system designed for:
-- **Sub-30 second detection latency** on streaming data
-- **Hybrid detection** combining rule-based heuristics with RandomForest classifiers
-- **Offline training** with automated feature engineering and normalization
-- **Batch and streaming inference** with flexible output formats
-- **Attack type support**: port scanning, brute force, data exfiltration, beaconing
-- **Production-ready**: tested, documented, and deployment-ready
+**Documentation:**
+- `README.md` - Project overview and quick start
+- `USER_GUIDE.md` - Detailed usage instructions
+- `DEVELOPER_DOCS.md` - Architecture and API reference
+- `FINAL_REPORT.md` - Implementation details and testing evidence
+- `INTEGRATION_PLAYBOOK.md` - Lab testing guide
 
-## Key Features
+---
 
-### 🎯 Hybrid Detection Engine
-- **Heuristic rules** for immediate detection of port scans, brute force attempts, unusual protocols
-- **RandomForest ML** for complex pattern recognition and false positive reduction
-- **Confidence scoring** with per-host windowed features
-- **Sub-30 second latency** on 1000+ flow datasets
+### 2. **IDS-Project**
+Machine learning-based Intrusion Detection System (IDS) with hybrid threat detection.
 
-### 🔄 Data Pipeline
-- **Automated normalization** with vendor-agnostic column mapping
-- **Pseudo-IP synthesis** for datasets with missing source/destination IPs
-- **Deterministic feature engineering** using vectorized NumPy operations
-- **Stratified training** with automatic class balancing
+**Branch:** `IDS-Project`
 
-### 📊 Training & Inference
-- **Offline training**: RandomForest with configurable hyperparameters
-- **Batch inference**: process entire datasets at once
-- **Streaming inference**: process individual network flows in real-time
-- **Feature-only mode**: generate features without ML predictions
-- **Model serialization**: save/load trained models with joblib
+**Features:**
+- Hybrid detection: heuristics + RandomForest ML
+- Sub-30 second latency on streaming data
+- Batch and streaming inference modes
+- Automated feature engineering and normalization
+- Support for port scanning, brute force, data exfiltration detection
+- Production-ready with comprehensive testing
 
-### 🛠️ User-Friendly CLI
-- **One-word commands**: `ids train`, `ids batch`, `ids stream`, `ids precheck`
-- **Windows/Linux/Mac** support with `ids.bat` and `ids.ps1` wrappers
-- **Flexible inputs**: CSV files, JSON objects, STDIN streaming
-- **Rich reporting**: per-file JSON reports, consolidated summaries, coverage metrics
+**Quick Start:**
+```bash
+git clone <repo-url>
+git checkout IDS-Project
+# See README.md in IDS-Project branch for full setup
+```
+
+**Documentation:**
+- `README.md` - Project overview and features
+- `INSTALLATION.md` - Setup and dependencies
+- `USAGE.md` - Command reference
+- `ARCHITECTURE.md` - System design and components
+- `API.md` - Python API reference
+
+---
+
+## 🏗️ Repository Structure
+
+```
+Server-Admin-Work/
+├── Server-Admin-Project/  [branch: Server-Admin-Project]
+│   ├── Setup-FabrikamServer-Extended.ps1
+│   ├── Setup-FabrikamServer-Extended.Tests.ps1
+│   ├── USER_GUIDE.md
+│   ├── DEVELOPER_DOCS.md
+│   └── ... (documentation and resources)
+│
+├── IDS-Project/  [branch: IDS-Project]
+│   ├── IDS-tool/
+│   │   ├── src/
+│   │   ├── scripts/
+│   │   ├── tests/
+│   │   └── data/
+│   ├── README.md
+│   └── ... (IDS documentation)
+│
+└── [main: Overview only]
+    └── README.md (this file)
+```
+
+---
+
+## 🚀 Getting Started
+
+### Clone and select a project:
+
+**For Server-Admin-Project:**
+```bash
+git clone <repo-url>
+cd Server-Admin-Work
+git checkout Server-Admin-Project
+# Read README.md for setup and usage
+```
+
+**For IDS-Project:**
+```bash
+git clone <repo-url>
+cd Server-Admin-Work
+git checkout IDS-Project
+# Read README.md for setup and usage
+```
+
+---
+
+## 📚 Documentation
+
+Each branch contains full documentation. See branch-specific READMEs:
+- **Server-Admin-Project**: PowerShell script documentation, API reference, and usage examples
+- **IDS-Project**: Python IDS tool documentation, ML architecture, and training guide
+
+---
+
+## 🔄 CI/CD Pipelines
+
+Both projects include GitHub Actions workflows:
+- **Server-Admin-Project**: Pester tests + PSScriptAnalyzer
+- **IDS-Project**: Python tests + linting
+
+---
+
+## 📝 License
+
+See branch-specific documentation for license information.
 
 ## Quick Start
 
